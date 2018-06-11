@@ -16,6 +16,8 @@ import data_mani
 
 BATCH_SIZE = 100
 MAX_STEPS = 1000
+LEARNING_RATE = 0.01
+EPSLON = 0.0001
 
 # RNN Classifier Model
 ''' Comecando apenas um RNN com 2 hidden com 10 nodes
@@ -40,6 +42,9 @@ def rnn_model(features, labels, params, mode):
 
 	# Computa as saidas, um node para cada classe
 	logits = tf.layers.dense(neural_net, units= params['n_classes'], activation= None)
+	eps_tensor = tf.constant([EPSLON, EPSLON, EPSLON])
+
+	logits = tf.add(logits, eps_tensor)
 
 	# Agora eh a parte de computar as predicoes
 	predictions_prob = tf.argmax(logits, 1)
@@ -93,7 +98,6 @@ def cnn_model(features, labels, params, mode):
 	conv_net = tf.reshape(features['img'], [-1, 28, 28, 1])
 
 	# Primeira Convolutional Layer
-	filter1 = tf.get_variable('filter1', [params['kernels'][0][0], params['kernels'][0][1], 1, 1], dtype = 'float16')
 	conv_net = tf.layers.conv2d(conv_net,
 							filters = 1,
 							kernel_size = params['kernels'][0],
@@ -147,7 +151,7 @@ def cnn_model(features, labels, params, mode):
 	# Create training op.
 	assert mode == tf.estimator.ModeKeys.TRAIN
 
-	optimizer = tf.train.AdamOptimizer(learning_rate=params['learning_rate'])
+	optimizer = tf.train.AdamOptimizer(learning_rate=params['learning_rate'], epsilon= EPSLON)
 	train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
 	return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
 
@@ -175,21 +179,21 @@ def main(args):
 	feature_column = [tf.feature_column.numeric_column(key = 'img', shape = [28, 28])]
 
 	cnn_config = {'feature_column' : feature_column,
-				 'kernels'		   : [[5, 5], [5, 5]],
+				 'kernels'		   : [[3, 3], [3, 3]],
 				  'dense'		   : 5,
 				  'n_classes'  	   : 3,
-				  'learning_rate'  : 0.01
+				  'learning_rate'  : LEARNING_RATE
 									}
 
 	rnn_config = {'feature_column' : feature_column,
 				  'hidden_units'   : [5, 5],
 				  'n_classes'  	   : 3,
-				  'learning_rate'  : 0.01
+				  'learning_rate'  : LEARNING_RATE
 									}
 
 	meu_classificador = tf.estimator.Estimator(
-									model_fn = rnn_model,
-									params = rnn_config)
+									model_fn = cnn_model,
+									params = cnn_config)
 
 	meu_classificador.train(input_fn= lambda:data_mani.train_input_fn(train_obj_list, BATCH_SIZE), max_steps= MAX_STEPS)
 
