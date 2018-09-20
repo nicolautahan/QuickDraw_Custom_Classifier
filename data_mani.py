@@ -13,7 +13,7 @@ import numpy as np
 import tensorflow as tf
 
 
-basic_path = '/Users/nicolautahan/Documents/Dev/numpy-data/full-numpy_bitmap-'
+basic_path = '/Users/nicolautahan/Documents/quick-data/full_numpy_bitmap_'
 labels_list = ['airplane', 'apple', 'bicycle']	# Tipos de desenho
 
 label_index = {

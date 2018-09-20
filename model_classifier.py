@@ -193,12 +193,12 @@ def main(args):
 
 	meu_classificador = tf.estimator.Estimator(
 									model_fn = cnn_model,
-									params = cnn_config)
+									params = cnn_config,
+									model_dir = 'model/cnn')
 
 	meu_classificador.train(input_fn= lambda:data_mani.train_input_fn(train_obj_list, BATCH_SIZE), max_steps= MAX_STEPS)
 
 	class_eval = meu_classificador.evaluate(input_fn= lambda:data_mani.test_input_fn(test_obj_list, BATCH_SIZE))
-	print(class_eval)
 
 	predictions = meu_classificador.predict(input_fn= lambda:data_mani.test_input_fn(predict_obj_list, BATCH_SIZE))
 
