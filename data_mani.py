@@ -91,7 +91,7 @@ def train_input_fn(obj_list, batch_size):
 	labels_list = []
 
 	for img_obj in obj_list:
-		img_tensor = tf.convert_to_tensor(img_obj.img)
+		img_tensor = tf.convert_to_tensor(img_obj.img, name = 'ImgInput')
 		img_tensor = tf.reshape(img_tensor, [28, 28])
 		img_tensor = tf.cast(img_tensor, 'float16')
 
@@ -108,7 +108,7 @@ def test_input_fn(obj_list, batch_size):
 	labels_list = []
 
 	for img_obj in obj_list:
-		img_tensor = tf.convert_to_tensor(img_obj.img)
+		img_tensor = tf.convert_to_tensor(img_obj.img, name = 'ImgInput')
 		img_tensor = tf.reshape(img_tensor, [28, 28])
 		img_tensor = tf.cast(img_tensor, 'float16')
 

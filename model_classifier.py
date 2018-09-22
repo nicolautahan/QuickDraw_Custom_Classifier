@@ -17,7 +17,7 @@ import data_mani
 BATCH_SIZE = 100
 MAX_STEPS = 1000
 LEARNING_RATE = 0.01
-EPSLON = 0.0001
+EPSLON = 0.001
 
 # RNN Classifier Model
 ''' Comecando apenas um RNN com 2 hidden com 10 nodes
@@ -29,55 +29,57 @@ EPSLON = 0.0001
 	}
 '''
 def rnn_model(features, labels, params, mode):
-	
-	# Input layer => recebe o dataset e a coluna de features
-	#  Se tiver uma feature na feature_column com a key 'img' ele vai procurar
-	#  essa key no dicionario
-	neural_net = tf.feature_column.input_layer(features, params['feature_column'])
+	with tf.Session() as sess:
+		# Input layer => recebe o dataset e a coluna de features
+		#  Se tiver uma feature na feature_column com a key 'img' ele vai procurar
+		#  essa key no dicionario
+		neural_net = tf.feature_column.input_layer(features, params['feature_column'])
 
-	# Cria uma layer densa(fully connected) com o tanto de nodes
-	# especificado
-	for units in params['hidden_units']:
-		neural_net = tf.layers.dense(neural_net, units= units, activation= tf.nn.relu)
+		# Cria uma layer densa(fully connected) com o tanto de nodes
+		# especificado
+		for i, units in enumerate(params['hidden_units']):
+			neural_net = tf.layers.dense(neural_net, units= units, activation= tf.nn.relu, name = 'DenseLayer' + str(i))
 
-	# Computa as saidas, um node para cada classe
-	logits = tf.layers.dense(neural_net, units= params['n_classes'], activation= None)
-	eps_tensor = tf.constant([EPSLON, EPSLON, EPSLON])
+		# Computa as saidas, um node para cada classe
+		logits = tf.layers.dense(neural_net, units= params['n_classes'], activation= None, name = 'Logits')
+		eps_tensor = tf.constant([EPSLON, EPSLON, EPSLON], name = 'Epsilon')
 
-	logits = tf.add(logits, eps_tensor)
+		logits = tf.add(logits, eps_tensor)
 
-	# Agora eh a parte de computar as predicoes
-	predictions_prob = tf.argmax(logits, 1)
-	if mode == tf.estimator.ModeKeys.PREDICT:
-		predictions = {
-			'class_ids' : predictions_prob[:, tf.newaxis],
-			'probs'		: tf.nn.softmax(logits),
-			'logits'	: logits
-		}
-		return tf.estimator.EstimatorSpec(mode, predictions= predictions)
+		# Agora eh a parte de computar as predicoes
+		predictions_prob = tf.argmax(logits, 1, name = 'MaiorCerteza')
+		if mode == tf.estimator.ModeKeys.PREDICT:
+			predictions = {
+				'class_ids' : predictions_prob[:, tf.newaxis],
+				'probs'		: tf.nn.softmax(logits, name = 'Probabilidade'),
+				'logits'	: logits
+			}
+			return tf.estimator.EstimatorSpec(mode, predictions= predictions)
 
-	# Apatir de agora e definindo o treinamento e a evaluation
+		# Apatir de agora e definindo o treinamento e a evaluation
 
-	# Perda
-	loss = tf.losses.sparse_softmax_cross_entropy(labels = labels, logits= logits)
+		# Perda
+		loss = tf.losses.sparse_softmax_cross_entropy(labels = labels, logits= logits)
+		loss_summary = tf.summary.scalar('loss', loss)
+		# Compute evaluation metrics.
+		accuracy = tf.metrics.accuracy(labels=labels,
+										predictions=predictions_prob,
+										name='accuracy')
+		metrics = {'accuracy': accuracy}
+		acc_summary = tf.summary.scalar('accuracy', accuracy[1])
 
-	# Compute evaluation metrics.
-	accuracy = tf.metrics.accuracy(labels=labels,
-									predictions=predictions_prob,
-									name='acc_op')
-	metrics = {'accuracy': accuracy}
-	tf.summary.scalar('accuracy', accuracy[1])
+		if mode == tf.estimator.ModeKeys.EVAL:
+			return tf.estimator.EstimatorSpec(
+				mode, loss=loss, eval_metric_ops=metrics)
 
-	if mode == tf.estimator.ModeKeys.EVAL:
-		return tf.estimator.EstimatorSpec(
-			mode, loss=loss, eval_metric_ops=metrics)
+		
+		# Create training op.
+		assert mode == tf.estimator.ModeKeys.TRAIN
 
-	# Create training op.
-	assert mode == tf.estimator.ModeKeys.TRAIN
+		optimizer = tf.train.AdagradOptimizer(learning_rate=params['learning_rate'])
+		train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
 
-	optimizer = tf.train.AdagradOptimizer(learning_rate=params['learning_rate'])
-	train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
-	return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
+		return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
 
 
 # CNN Classifier Model
@@ -95,65 +97,67 @@ def cnn_model(features, labels, params, mode):
 	#  Se tiver uma feature na feature_column com a key 'img' ele vai procurar
 	#  essa key no dicionario
 	#conv_net = tf.feature_column.input_layer(features, params['feature_column'])
-	conv_net = tf.reshape(features['img'], [-1, 28, 28, 1])
+	with tf.Session() as sess:
+		conv_net = tf.reshape(features['img'], [-1, 28, 28, 1], name = 'InputReshape')
 
-	# Primeira Convolutional Layer
-	conv_net = tf.layers.conv2d(conv_net,
-							filters = 1,
-							kernel_size = params['kernels'][0],
-							padding = 'SAME')
-	conv_net = tf.layers.max_pooling2d(conv_net,
-							 pool_size = [2, 2],
-							 strides = 2)
+		# Primeira Convolutional Layer
+		conv_net = tf.layers.conv2d(conv_net,
+								filters = 1,
+								kernel_size = params['kernels'][0],
+								padding = 'SAME')
+		conv_net = tf.layers.max_pooling2d(conv_net,
+								 pool_size = [2, 2],
+								 strides = 2)
 
-	# Segunda Convolutional Layer
-	conv_net = tf.layers.conv2d(conv_net,
-							filters = 1,
-							kernel_size = params['kernels'][1], 
-							padding = 'SAME')
-	conv_net = tf.layers.max_pooling2d(conv_net,
-							 pool_size = [2, 2],
-							 strides = 2)
+		# Segunda Convolutional Layer
+		conv_net = tf.layers.conv2d(conv_net,
+								filters = 1,
+								kernel_size = params['kernels'][1], 
+								padding = 'SAME')
+		conv_net = tf.layers.max_pooling2d(conv_net,
+								 pool_size = [2, 2],
+								 strides = 2)
 
-	# Final Dense Layer
-	conv_net = tf.reshape(conv_net, [-1, 7*7])
-	conv_net = tf.layers.dense(conv_net, units = params['dense'], activation = tf.nn.relu)
+		# Final Dense Layer
+		conv_net = tf.reshape(conv_net, [-1, 7*7], name = 'reshapeForDense')
+		conv_net = tf.layers.dense(conv_net, units = params['dense'], activation = tf.nn.relu)
 
-	# Computa as saidas, um node para cada classe
-	logits = tf.layers.dense(conv_net, units= params['n_classes'], activation= None)
+		# Computa as saidas, um node para cada classe
+		logits = tf.layers.dense(conv_net, units= params['n_classes'], activation= None)
 
-	# Agora eh a parte de computar as predicoes
-	predictions_prob = tf.argmax(logits, 1)
-	if mode == tf.estimator.ModeKeys.PREDICT:
-		predictions = {
-			'class_ids' : predictions_prob[:, tf.newaxis],
-			'probs'		: tf.nn.softmax(logits),
-			'logits'	: logits
-		}
-		return tf.estimator.EstimatorSpec(mode, predictions= predictions)
+		# Agora eh a parte de computar as predicoes
+		predictions_prob = tf.argmax(logits, 1, name = 'Prediction')
+		if mode == tf.estimator.ModeKeys.PREDICT:
+			predictions = {
+				'class_ids' : predictions_prob[:, tf.newaxis],
+				'probs'		: tf.nn.softmax(logits),
+				'logits'	: logits
+			}
+			return tf.estimator.EstimatorSpec(mode, predictions= predictions)
 
-	# Apatir de agora e definindo o treinamento e a evaluation
+		# Apatir de agora e definindo o treinamento e a evaluation
 
-	# Perda
-	loss = tf.losses.sparse_softmax_cross_entropy(labels = labels, logits= logits)
+		# Perda
+		loss = tf.losses.sparse_softmax_cross_entropy(labels = labels, logits= logits)
 
-	# Compute evaluation metrics.
-	accuracy = tf.metrics.accuracy(labels=labels,
-									predictions=predictions_prob,
-									name='acc_op')
-	metrics = {'accuracy': accuracy}
-	tf.summary.scalar('accuracy', accuracy[1])
+		# Compute evaluation metrics.
+		accuracy = tf.metrics.accuracy(labels=labels,
+										predictions=predictions_prob,
+										name='acc_op')
+		metrics = {'accuracy': accuracy}
+		tf.summary.scalar('accuracy', accuracy[1])
 
-	if mode == tf.estimator.ModeKeys.EVAL:
-		return tf.estimator.EstimatorSpec(
-			mode, loss=loss, eval_metric_ops=metrics)
+		if mode == tf.estimator.ModeKeys.EVAL:
+			return tf.estimator.EstimatorSpec(
+				mode, loss=loss, eval_metric_ops=metrics)
 
-	# Create training op.
-	assert mode == tf.estimator.ModeKeys.TRAIN
+		# Create training op.
+		assert mode == tf.estimator.ModeKeys.TRAIN
 
-	optimizer = tf.train.AdamOptimizer(learning_rate=params['learning_rate'], epsilon= EPSLON)
-	train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
-	return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
+		optimizer = tf.train.AdamOptimizer(learning_rate=params['learning_rate'], epsilon= EPSLON)
+		train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
+
+		return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
 
 def main(args):
 	data_obj_list = data_mani.load_data()
@@ -201,6 +205,7 @@ def main(args):
 	class_eval = meu_classificador.evaluate(input_fn= lambda:data_mani.test_input_fn(test_obj_list, BATCH_SIZE))
 
 	predictions = meu_classificador.predict(input_fn= lambda:data_mani.test_input_fn(predict_obj_list, BATCH_SIZE))
+
 
 	print('')
 	print('')
